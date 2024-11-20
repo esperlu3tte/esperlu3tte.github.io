@@ -172,7 +172,7 @@
 		<script src="/assets/js/fr.js"></script>
 
 		<script src="/assets/js/scripts.js?v=56"></script>
-		<script src="https://unpkg.com/mediainfo.js@0.2.2/dist/umd/index.min.js"></script>
+		<script src="https://unpkg.com/mediainfo.js@0.3.3/dist/umd/index.min.js"></script>
 
 		<script>
 			$(document).ready(function () {
@@ -219,7 +219,7 @@
 								})
 								.catch(error => {
 									output.value = "Une erreur est apparue.\n ⚠ Attention de bien envoyer les pistes d'un album et non pas le dossier lui-même.\n\nDump de l'erreur :\n" + error.stack;
-									console.log(error.stack);
+									console.error(error);
 								});
 						};
 
@@ -227,32 +227,28 @@
 					}
 				};
 
-				MediaInfo(
-					{
-						format: 'text',
-					},
-					mediainfo => {
-						fileinput.removeAttribute('disabled');
-						fileinput.addEventListener('change', () => {
-							onChangeFile(mediainfo, fileinput.files);
-						});
+				MediaInfo.mediaInfoFactory({
+					format: 'text',
+				}).then((mediainfo) => {
+					fileinput.removeAttribute('disabled');
+					fileinput.addEventListener('change', () => {
+						onChangeFile(mediainfo, fileinput.files);
+					});
 
-						// Drag and drop functionality
-						dropZone.addEventListener('dragover', (e) => {
-							e.preventDefault();
-							dropZone.classList.add('drag-over');
-						});
-						dropZone.addEventListener('dragleave', () => {
-							dropZone.classList.remove('drag-over');
-						});
-						dropZone.addEventListener('drop', (e) => {
-							e.preventDefault();
-							dropZone.classList.remove('drag-over');
-							onChangeFile(mediainfo, e.dataTransfer.files);
-						});
-					}
-				);
-
+					// Drag and drop functionality
+					dropZone.addEventListener('dragover', (e) => {
+						e.preventDefault();
+						dropZone.classList.add('drag-over');
+					});
+					dropZone.addEventListener('dragleave', () => {
+						dropZone.classList.remove('drag-over');
+					});
+					dropZone.addEventListener('drop', (e) => {
+						e.preventDefault();
+						dropZone.classList.remove('drag-over');
+						onChangeFile(mediainfo, e.dataTransfer.files);
+					});
+				});
 
 				const parseNFO = result => {
 					const lines = result.split('\n');
