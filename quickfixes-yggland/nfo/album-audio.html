@@ -127,6 +127,18 @@
 									  <label class="custom-file-label" for="nfoinput" data-browse="Parcourir...">Choisir les pistes de l'album</label>
 								</div>
 							</div>
+							<div class="input-group nfo-input mb-4">
+								<div class="input-group-prepend">
+									<span class="input-group-text" id="concurrencylabel">Nombre de processus</span>
+								</div>
+								<input
+									type="number"
+									class="form-control"
+									name="concurrency" id="concurrency" required="" aria-label="concurrency" aria-describedby="concurrencylabel" autofocus=""
+									value="4"
+									min="1" max="10"
+								>
+							</div>
 							<div>
 								<button type="button" class="btn btn-secondary d-inline-block mb-4" id="save-nfo">Sauvegarder NFO</button>
 								<button type="submit" class="btn btn-secondary d-inline-block mb-4" id="download-nfo">Télécharger NFO</button>
@@ -179,76 +191,82 @@
 				const fileinput = document.getElementById('fileinput');
 				const dropZone = document.getElementById('output');
 				const output = document.getElementById('output');
+				const concurrencyInput = document.getElementById('concurrency');
 				let tracklist = [];
 				let originalFileName;
 
-				const onChangeFile = (mediainfo, inputFiles) => {
+				fileinput.removeAttribute('disabled');
+				fileinput.addEventListener('change', () => {
+					onChangeFile(fileinput.files);
+				});
+
+				// Drag and drop functionality
+				dropZone.addEventListener('dragover', (e) => {
+					e.preventDefault();
+					dropZone.classList.add('drag-over');
+				});
+				dropZone.addEventListener('dragleave', () => {
+					dropZone.classList.remove('drag-over');
+				});
+				dropZone.addEventListener('drop', (e) => {
+					e.preventDefault();
+					dropZone.classList.remove('drag-over');
+					onChangeFile(e.dataTransfer.files);
+				});
+
+				concurrencyInput.setAttribute("max", navigator.hardwareConcurrency);
+
+				const onChangeFile = async (inputFiles) => {
 					const files = Array.from(inputFiles);
 					if (files.length > 0) {
-						output.value = 'Lecture des fichiers…';
 						tracklist = []; // Réinitialise le tableau tracklist pour chaque sélection de fichiers
 
-						const processNextFile = (fileIndex) => {
-							if (fileIndex >= files.length) {
-								// Tous les fichiers ont été traités, génération du NFO complet
-								const musicNFO = generateMusicNFO(files);
-								output.value = musicNFO;
-								return;
-							}
+						const displayFeedback = (done = 0) => {
+							output.value = `Lecture des fichiers… (${done}/${files.length})`;
+						};
+						displayFeedback(0);
 
+						const statStart = new Date();
+
+						let fileIndexToDo = 0;
+						const workerQueue = async (mediainfo) => {
+							const fileIndex = fileIndexToDo++;
 							const file = files[fileIndex];
+							if (!file) {
+								return;
+							};
 							const getSize = () => file.size;
-
-							const readChunk = (chunkSize, offset) =>
-								new Promise((resolve, reject) => {
-									const reader = new FileReader();
-									reader.onload = event => {
-										if (event.target.error) {
-											reject(event.target.error);
-										}
-										resolve(new Uint8Array(event.target.result));
-									};
-									reader.readAsArrayBuffer(file.slice(offset, offset + chunkSize));
-								});
-
-							mediainfo
-								.analyzeData(getSize, readChunk)
-								.then(result => {
-									parseNFO(result);
-									processNextFile(fileIndex + 1); // Passer au fichier suivant
-								})
-								.catch(error => {
-									output.value = "Une erreur est apparue.\n ⚠ Attention de bien envoyer les pistes d'un album et non pas le dossier lui-même.\n\nDump de l'erreur :\n" + error.stack;
-									console.error(error);
-								});
+							const readChunk = async (chunkSize, offset) => new Uint8Array(await file.slice(offset, offset + chunkSize).arrayBuffer());
+							const result = await mediainfo.analyzeData(getSize, readChunk);
+							parseNFO(result);
+							displayFeedback(Math.min(fileIndexToDo, files.length));
+							return await workerQueue(mediainfo);
 						};
 
-						processNextFile(0); // Commencer le traitement avec le premier fichier
+						const concurrencyMin = concurrencyInput.getAttribute("min");
+						const concurrencyMax = concurrencyInput.getAttribute("max");
+						const processMaxNumber = Math.min(Math.min(Math.max(concurrencyInput.value, concurrencyMin), concurrencyMax), files.length);
+						console.info("Process Number:", processMaxNumber);
+						const workerQueuePromises = [];
+						for (let processNumber = 0; processNumber < processMaxNumber; processNumber++) {
+							workerQueuePromises.push(
+								MediaInfo
+									.mediaInfoFactory({ format: 'text' })
+									.then(async (mediainfo) => {
+										await workerQueue(mediainfo);
+										await mediainfo.close();
+									}),
+							);
+						}
+						await Promise.all(workerQueuePromises);
+
+						const musicNFO = generateMusicNFO(files);
+						output.value = musicNFO;
+
+						const statEnd = new Date();
+						console.info(`Analyzed on: ${(statEnd - statStart) / 1000}s`);
 					}
 				};
-
-				MediaInfo.mediaInfoFactory({
-					format: 'text',
-				}).then((mediainfo) => {
-					fileinput.removeAttribute('disabled');
-					fileinput.addEventListener('change', () => {
-						onChangeFile(mediainfo, fileinput.files);
-					});
-
-					// Drag and drop functionality
-					dropZone.addEventListener('dragover', (e) => {
-						e.preventDefault();
-						dropZone.classList.add('drag-over');
-					});
-					dropZone.addEventListener('dragleave', () => {
-						dropZone.classList.remove('drag-over');
-					});
-					dropZone.addEventListener('drop', (e) => {
-						e.preventDefault();
-						dropZone.classList.remove('drag-over');
-						onChangeFile(mediainfo, e.dataTransfer.files);
-					});
-				});
 
 				const parseNFO = result => {
 					const lines = result.split('\n');
