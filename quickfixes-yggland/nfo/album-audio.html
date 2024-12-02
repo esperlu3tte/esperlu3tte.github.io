@@ -214,6 +214,7 @@
 					onChangeFile(e.dataTransfer.files);
 				});
 
+				concurrencyInput.value = Math.min(concurrencyInput.value, navigator.hardwareConcurrency);
 				concurrencyInput.setAttribute("max", navigator.hardwareConcurrency);
 
 				const onChangeFile = async (inputFiles) => {
