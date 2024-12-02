@@ -239,7 +239,7 @@
 							const getSize = () => file.size;
 							const readChunk = async (chunkSize, offset) => new Uint8Array(await file.slice(offset, offset + chunkSize).arrayBuffer());
 							const result = await mediainfo.analyzeData(getSize, readChunk);
-							parseNFO(result);
+							parseNFO(result, fileIndex);
 							displayFeedback(Math.min(fileIndexToDo, files.length));
 							return await workerQueue(mediainfo);
 						};
@@ -269,7 +269,7 @@
 					}
 				};
 
-				const parseNFO = result => {
+				const parseNFO = (result, index) => {
 					const lines = result.split('\n');
 					let trackInfo = {};
 					lines.forEach(line => {
@@ -279,7 +279,11 @@
 							// console.log(key+':'+value);
 						}
 					});
-					tracklist.push(trackInfo);
+					if (typeof index === "number") {
+						tracklist[index] = trackInfo;
+					} else {
+						tracklist.push(trackInfo);
+					}
 				};
 
 				const generateMusicNFO = (inputFiles) => {
